@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ameren (AEE) - Shares Outstanding</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 90vh;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 80%;
+            max-width: 700px;
+        }
+        h1 {
+            color: #007bff;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            letter-spacing: 1px;
+        }
+        .data-section {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            text-align: left;
+        }
+        .data-item {
+            background-color: #e9ecef;
+            padding: 20px;
+            border-radius: 8px;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .data-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+        .data-item h3 {
+            margin-top: 0;
+            color: #0056b3;
+            font-size: 1.2em;
+        }
+        .data-item p {
+            font-size: 1.1em;
+            margin: 5px 0;
+        }
+        .data-item .value {
+            font-weight: bold;
+            font-size: 1.5em;
+            color: #28a745; /* Green for values */
+        }
+        .data-item .fy {
+            font-style: italic;
+            color: #6c757d;
+        }
+        #loading, #error {
+            font-size: 1.2em;
+            color: #dc3545;
+            margin-top: 20px;
+        }
+        #loading {
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="entity-name">Ameren (AEE) - Shares Outstanding</h1>
+
+        <div id="loading">Loading data...</div>
+        <div id="error" style="display: none;"></div>
+
+        <div id="data-display" style="display: none;">
+            <div class="data-section">
+                <div class="data-item">
+                    <h3>Maximum Shares Outstanding</h3>
+                    <p>Year: <span id="share-max-fy" class="fy"></span></p>
+                    <p>Value: <span id="share-max-value" class="value"></span></p>
+                </div>
+                <div class="data-item">
+                    <h3>Minimum Shares Outstanding</h3>
+                    <p>Year: <span id="share-min-fy" class="fy"></span></p>
+                    <p>Value: <span id="share-min-value" class="value"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SEC_API_BASE = "https://data.sec.gov/api/xbrl/companyconcept/";
+        const USER_AGENT = "Ameren AEE SEC Data Fetcher (mailto:your.email@example.com)";
+
+        async function fetchData(cik) {
+            const url = `${SEC_API_BASE}${cik}/dei/EntityCommonStockSharesOutstanding.json`;
+            const entityNameElement = document.getElementById('entity-name');
+            const loadingElement = document.getElementById('loading');
+            const errorElement = document.getElementById('error');
+            const dataDisplayElement = document.getElementById('data-display');
+
+            entityNameElement.textContent = "Fetching Data...";
+            loadingElement.style.display = 'block';
+            errorElement.style.display = 'none';
+            dataDisplayElement.style.display = 'none';
+
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'User-Agent': USER_AGENT
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                const entityName = data.entityName;
+                entityNameElement.textContent = `${entityName} - Shares Outstanding`;
+
+                const shares = data.units.shares || [];
+                const filteredShares = shares.filter(item => item.fy && parseInt(item.fy) > 2020 && typeof item.val === 'number');
+
+                if (filteredShares.length === 0) {
+                    errorElement.textContent = "No relevant share data found after fiscal year 2020.";
+                    errorElement.style.display = 'block';
+                    return;
+                }
+
+                let maxShare = filteredShares[0];
+                let minShare = filteredShares[0];
+
+                for (let i = 1; i < filteredShares.length; i++) {
+                    if (filteredShares[i].val > maxShare.val) {
+                        maxShare = filteredShares[i];
+                    }
+                    if (filteredShares[i].val < minShare.val) {
+                        minShare = filteredShares[i];
+                    }
+                }
+
+                document.getElementById('share-entity-name').textContent = entityName;
+                document.getElementById('share-max-value').textContent = maxShare.val.toLocaleString();
+                document.getElementById('share-max-fy').textContent = maxShare.fy;
+                document.getElementById('share-min-value').textContent = minShare.val.toLocaleString();
+                document.getElementById('share-min-fy').textContent = minShare.fy;
+
+                loadingElement.style.display = 'none';
+                dataDisplayElement.style.display = 'block';
+
+            } catch (error) {
+                console.error("Error fetching or processing data:", error);
+                errorElement.textContent = `Failed to load data: ${error.message}. Please check the CIK or your network connection.`;
+                errorElement.style.display = 'block';
+                loadingElement.style.display = 'none';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const cik = params.get('CIK');
+
+            if (cik && /^\d{10}$/.test(cik)) {
+                fetchData(cik);
+            } else {
+                fetchData('0001002910'); // Default to Ameren
+            }
+        });
+    </script>
+</body>
+</html>
